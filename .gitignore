@@ -1,0 +1,42 @@
+# =========================
+# Environnements Virtuels
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Données et Spark (CRITIQUE)
+# =========================
+# On ignore le dossier où ton script sauvegarde les tables Delta
+tmp/
+data/
+# On ignore les fichiers temporaires créés par Spark en local
+spark-warehouse/
+metastore_db/
+derby.log
+_delta_log/
+*.parquet
+*.snappy.parquet
+*.crc
+
+# =========================
+# Cache Python et Outils
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# =========================
+# Editeur (VS Code, etc.)
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Système d'exploitation
+# =========================
+.DS_Store
+Thumbs.db
