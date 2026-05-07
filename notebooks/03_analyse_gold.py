@@ -9,7 +9,7 @@ from pyspark.sql.functions import col, count, sum, when, round
 
 # 1. Définition des chemins
 # Assure-toi que le chemin Silver correspond bien à celui utilisé dans le notebook 02
-path_silver_plv = "/tmp/data/silver/prelevements"
+path_silver_plv = "/tmp/data/silver/hubeau_qualite_eau"
 path_gold_kpi = "/tmp/data/gold/kpi_qualite_communes"
 
 print("Lecture des données Silver...")

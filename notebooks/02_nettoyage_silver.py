@@ -18,7 +18,7 @@ from pyspark.sql.functions import (
 # 1. Définition des chemins (à adapter selon ton architecture)
 # Supposons que tu as sauvegardé tes données Bronze au format Delta
 path_bronze_plv = "/tmp/data/bronze/hubeau_qualite_eau"
-path_silver_plv = "/tmp/data/silver/prelevements"
+path_silver_plv = "/tmp/data/silver/hubeau_qualite_eau"
 
 # Si tu lis directement les CSV/TXT pour tester, décommente la ligne ci-dessous et commente la lecture Delta :
 # df_bronze = spark.read.csv("/FileStore/tables/DIS_PLV_*.txt", header=True, sep=",", quote='"')
