@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import base64
 from pathlib import Path
 
 DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST")
@@ -42,7 +43,10 @@ def upload_notebooks():
 
     for notebook_file in notebooks_dir.glob("*.py"):
         notebook_name = notebook_file.stem
-        notebook_content = notebook_file.read_text()
+        notebook_content = notebook_file.read_bytes()
+        
+        # Encode content to base64
+        content_base64 = base64.b64encode(notebook_content).decode('utf-8')
 
         # Databricks API pour importer un notebook
         url = f"{DATABRICKS_HOST}/api/2.0/workspace/import"
@@ -52,16 +56,7 @@ def upload_notebooks():
             "format": "SOURCE",
             "language": "PYTHON",
             "overwrite": True,
-            "content": notebook_content,
-        }
-
-        response = requests.post(url, json=payload, headers=headers)
-
-        if response.status_code == 200:
-            print(f"  Uploaded {notebook_name}")
-        else:
-            print(f"  ERROR uploading {notebook_name}: {response.text}")
-            return False
+            "content": content_base64,
 
     print("All notebooks uploaded successfully")
     return True
