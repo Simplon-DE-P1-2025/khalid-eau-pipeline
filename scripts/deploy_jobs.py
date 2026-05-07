@@ -198,7 +198,7 @@ if __name__ == "__main__":
             },
         ],
         "schedule": {
-            "quartz_cron_expression": "0 0 * * *",
+            "quartz_cron_expression": "0 0 0 * * ?",
             "timezone_id": "Europe/Paris",
             "pause_status": "UNPAUSED",
         },
