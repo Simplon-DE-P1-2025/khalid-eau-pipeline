@@ -5,23 +5,11 @@
 
 # COMMAND ----------
 
-from pyspark.sql.functions import (
-    col,
-    to_date,
-    to_timestamp,
-    concat_ws,
-    regexp_replace,
-    trim,
-    upper,
-)
+from pyspark.sql.functions import col, to_timestamp, trim, upper
 
-# 1. Définition des chemins (à adapter selon ton architecture)
-# Supposons que tu as sauvegardé tes données Bronze au format Delta
+# 1. Définition des chemins
 path_bronze_plv = "/tmp/data/bronze/hubeau_qualite_eau"
-path_silver_plv = "/tmp/data/silver/hubeau_qualite_eau"
-
-# Si tu lis directement les CSV/TXT pour tester, décommente la ligne ci-dessous et commente la lecture Delta :
-# df_bronze = spark.read.csv("/FileStore/tables/DIS_PLV_*.txt", header=True, sep=",", quote='"')
+path_silver_plv = "/tmp/data/silver/prelevements"
 
 print("Lecture des données Bronze...")
 df_bronze = spark.read.format("delta").load(path_bronze_plv)
@@ -33,33 +21,19 @@ print("Application des transformations Silver...")
 
 df_silver = (
     df_bronze
-    # 2.1 Suppression des doublons stricts
-    .dropDuplicates(["referenceprel"])
-    # 2.2 Nettoyage des espaces sur les colonnes textuelles clés
-    .withColumn("cddept", trim(col("cddept")))
-    .withColumn("nomcommuneprinc", trim(upper(col("nomcommuneprinc"))))
-    .withColumn("conclusionprel", trim(col("conclusionprel")))
-    # 2.3 Typage de la date (format attendu : yyyy-MM-dd)
-    .withColumn("date_prelevement", to_date(col("dateprel"), "yyyy-MM-dd"))
-    # 2.4 Transformation de l'heure (remplacement du 'h' par ':' pour avoir HH:mm)
-    .withColumn("heureprel_clean", regexp_replace(col("heureprel"), "h", ":"))
-    # 2.5 Création d'un vrai Timestamp combinant la date et l'heure
+    # 2.1 La vraie clé primaire est la combinaison du prélèvement ET du paramètre mesuré
+    .dropDuplicates(["code_prelevement", "code_parametre"])
+    # 2.2 Nettoyage des espaces et standardisation en majuscules
+    .withColumn("code_departement", trim(col("code_departement")))
+    .withColumn("nom_commune", trim(upper(col("nom_commune"))))
     .withColumn(
-        "timestamp_prelevement",
-        to_timestamp(
-            concat_ws(" ", col("date_prelevement"), col("heureprel_clean")),
-            "yyyy-MM-dd HH:mm",
-        ),
+        "conclusion_conformite_prelevement",
+        trim(col("conclusion_conformite_prelevement")),
     )
-    # 2.6 Nettoyage de la colonne 'pourcentdebit' (retirer le symbole '%' et caster en float si possible)
-    .withColumn(
-        "pourcentdebit_clean",
-        regexp_replace(col("pourcentdebit"), " %", "").cast("float"),
-    )
-    # 2.7 Nettoyage : retirer les colonnes brutes inutiles ou redondantes
-    .drop("dateprel", "heureprel", "heureprel_clean", "pourcentdebit")
-    # 2.8 Filtrage des lignes corrompues (ex: pas de référence de prélèvement)
-    .filter(col("referenceprel").isNotNull() & (col("referenceprel") != ""))
+    # 2.3 Typage de la date (L'API renvoie du format ISO8601, Spark le gère nativement)
+    .withColumn("timestamp_prelevement", to_timestamp(col("date_prelevement")))
+    # 2.4 Filtrage de sécurité : on exclut les lignes sans identifiant de prélèvement
+    .filter(col("code_prelevement").isNotNull() & (col("code_prelevement") != ""))
 )
 
 # Aperçu du résultat

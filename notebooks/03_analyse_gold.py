@@ -1,43 +1,51 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Couche Gold - Analyse et KPIs de la Qualité de l'Eau
-# MAGIC Agrégation des données nettoyées (Silver) pour créer des indicateurs métiers (Data Marts) prêts pour la Data Visualisation.
+# MAGIC Agrégation des données nettoyées (Silver) pour créer des indicateurs métiers.
 
 # COMMAND ----------
 
 from pyspark.sql.functions import col, count, sum, when, round
 
 # 1. Définition des chemins
-# Assure-toi que le chemin Silver correspond bien à celui utilisé dans le notebook 02
-path_silver_plv = "/tmp/data/silver/hubeau_qualite_eau"
+path_silver_plv = "/tmp/data/silver/prelevements"
 path_gold_kpi = "/tmp/data/gold/kpi_qualite_communes"
 
 print("Lecture des données Silver...")
-# On charge la table Silver (nettoyée)
 df_silver = spark.read.format("delta").load(path_silver_plv)
 
 # COMMAND ----------
 
-# 2. Calcul des KPIs (Indicateurs de Performance)
+# 2. Préparation des données uniques
+# Une analyse d'eau (1 code_prelevement) contient plusieurs paramètres.
+# Pour calculer la conformité globale, on isole 1 ligne par prélèvement.
+df_unique_samples = df_silver.select(
+    "code_departement",
+    "nom_commune",
+    "code_prelevement",
+    "conformite_limites_bact_prelevement",
+    "conformite_limites_pc_prelevement",
+).dropDuplicates(["code_prelevement"])
+
+
+# 3. Calcul des KPIs (Indicateurs de Performance)
 print("Calcul des indicateurs de conformité par commune...")
 
 df_gold_kpi = (
-    df_silver
-    # On groupe par code département et nom de la commune
-    .groupBy("cddept", "nomcommuneprinc")
+    df_unique_samples.groupBy("code_departement", "nom_commune")
     .agg(
-        # Nombre total de prélèvements effectués
-        count("referenceprel").alias("total_prelevements"),
-        # Nombre de prélèvements conformes en bactériologie (Valeur "C")
-        sum(when(col("plvconformitebacterio") == "C", 1).otherwise(0)).alias(
-            "conformes_bacterio"
-        ),
-        # Nombre de prélèvements conformes en chimie (Valeur "C")
-        sum(when(col("plvconformitechimique") == "C", 1).otherwise(0)).alias(
-            "conformes_chimique"
-        ),
+        # Nombre total de prélèvements uniques
+        count("code_prelevement").alias("total_prelevements"),
+        # Comptage des prélèvements conformes en bactériologie (Valeur "C")
+        sum(
+            when(col("conformite_limites_bact_prelevement") == "C", 1).otherwise(0)
+        ).alias("conformes_bacterio"),
+        # Comptage des prélèvements conformes en physico-chimie (Valeur "C")
+        sum(
+            when(col("conformite_limites_pc_prelevement") == "C", 1).otherwise(0)
+        ).alias("conformes_chimique"),
     )
-    # 3. Calcul des pourcentages de conformité (arrondis à 2 décimales)
+    # Calcul des pourcentages
     .withColumn(
         "taux_conformite_bacterio_pct",
         round((col("conformes_bacterio") / col("total_prelevements")) * 100, 2),
@@ -46,7 +54,7 @@ df_gold_kpi = (
         "taux_conformite_chimique_pct",
         round((col("conformes_chimique") / col("total_prelevements")) * 100, 2),
     )
-    # Tri : afficher les communes avec les taux de conformité les plus bas en premier (pour identifier les alertes)
+    # Tri : Les pires taux en premier pour alerter
     .orderBy("taux_conformite_bacterio_pct", "taux_conformite_chimique_pct")
 )
 
@@ -61,9 +69,7 @@ print(f"Sauvegarde de la table Gold dans {path_gold_kpi}...")
 (
     df_gold_kpi.write.format("delta")
     .mode("overwrite")
-    .option(
-        "overwriteSchema", "true"
-    )  # Permet de mettre à jour la structure de la table si on ajoute des KPIs plus tard
+    .option("overwriteSchema", "true")
     .save(path_gold_kpi)
 )
 
