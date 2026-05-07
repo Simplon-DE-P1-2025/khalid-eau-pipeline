@@ -6,6 +6,7 @@ from pathlib import Path
 
 DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST")
 DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN")
+DATABRICKS_CLUSTER_ID = os.environ.get("DATABRICKS_CLUSTER_ID", "0507-112004-mwr9h09v")
 JOB_IDS_FILE = Path(__file__).parent.parent / "job_ids.json"
 
 if not DATABRICKS_HOST or not DATABRICKS_TOKEN:
@@ -114,11 +115,7 @@ def create_or_update_job(job_name, notebook_path, timeout_seconds=3600):
             {
                 "task_key": job_name.replace(" ", "_").replace("-", "_"),
                 "notebook_task": {"notebook_path": notebook_path},
-                "new_cluster": {
-                    "spark_version": "13.3.x-scala2.12",
-                    "node_type_id": "i3.xlarge",
-                    "num_workers": 2,
-                },
+                "existing_cluster_id": DATABRICKS_CLUSTER_ID,
                 "timeout_seconds": timeout_seconds,
             }
         ],
