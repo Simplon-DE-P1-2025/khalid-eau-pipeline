@@ -44,11 +44,9 @@ def upload_notebooks():
     for notebook_file in notebooks_dir.glob("*.py"):
         notebook_name = notebook_file.stem
         notebook_content = notebook_file.read_bytes()
-        
-        # Encode content to base64
-        content_base64 = base64.b64encode(notebook_content).decode('utf-8')
 
-        # Databricks API pour importer un notebook
+        content_base64 = base64.b64encode(notebook_content).decode("utf-8")
+
         url = f"{DATABRICKS_HOST}/api/2.0/workspace/import"
 
         payload = {
@@ -57,6 +55,15 @@ def upload_notebooks():
             "language": "PYTHON",
             "overwrite": True,
             "content": content_base64,
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+
+        if response.status_code == 200:
+            print(f"  Uploaded {notebook_name}")
+        else:
+            print(f"  ERROR uploading {notebook_name}: {response.text}")
+            return False
 
     print("All notebooks uploaded successfully")
     return True
