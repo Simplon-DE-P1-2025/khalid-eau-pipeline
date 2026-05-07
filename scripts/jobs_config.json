@@ -1,72 +1,31 @@
 {
     "jobs": [
         {
-            "name": "Pipeline - Ingestion Bronze",
-            "description": "Extraction des données depuis l'API Hub'Eau vers la couche Bronze",
-            "tasks": [
-                {
-                    "task_key": "ingestion_bronze",
-                    "notebook_task": {
-                        "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/01_ingestion_bronze"
-                    },
-                    "new_cluster": {
-                        "spark_version": "13.3.x-scala2.12",
-                        "node_type_id": "i3.xlarge",
-                        "num_workers": 2
-                    },
-                    "timeout_seconds": 3600
-                }
-            ]
-        },
-        {
-            "name": "Pipeline - Nettoyage Silver",
-            "description": "Nettoyage et transformation des données vers la couche Silver",
-            "tasks": [
-                {
-                    "task_key": "nettoyage_silver",
-                    "notebook_task": {
-                        "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/02_nettoyage_silver"
-                    },
-                    "new_cluster": {
-                        "spark_version": "13.3.x-scala2.12",
-                        "node_type_id": "i3.xlarge",
-                        "num_workers": 2
-                    },
-                    "timeout_seconds": 3600
-                }
-            ]
-        },
-        {
-            "name": "Pipeline - Analyse Gold",
-            "description": "Génération des KPIs et tables analytiques dans la couche Gold",
-            "tasks": [
-                {
-                    "task_key": "analyse_gold",
-                    "notebook_task": {
-                        "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/03_analyse_gold"
-                    },
-                    "new_cluster": {
-                        "spark_version": "13.3.x-scala2.12",
-                        "node_type_id": "i3.xlarge",
-                        "num_workers": 2
-                    },
-                    "timeout_seconds": 3600
-                }
-            ]
-        },
-        {
             "name": "Pipeline Complete - Bronze to Gold",
-            "description": "Orchestration complète : Ingestion -> Nettoyage -> Analyse",
+            "description": "Orchestration complète : Ingestion -> Nettoyage -> Analyse sur un seul cluster partagé",
+            "job_clusters": [
+                {
+                    "job_cluster_key": "cluster_pipeline_partage",
+                    "new_cluster": {
+                        "spark_version": "13.3.x-scala2.12",
+                        "node_type_id": "Standard_D2ds_v4",
+                        "num_workers": 0,
+                        "spark_conf": {
+                            "spark.master": "local[*]",
+                            "spark.databricks.cluster.profile": "singleNode"
+                        },
+                        "custom_tags": {
+                            "ResourceClass": "SingleNode"
+                        }
+                    }
+                }
+            ],
             "tasks": [
                 {
                     "task_key": "bronze",
+                    "job_cluster_key": "cluster_pipeline_partage",
                     "notebook_task": {
                         "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/01_ingestion_bronze"
-                    },
-                    "new_cluster": {
-                        "spark_version": "13.3.x-scala2.12",
-                        "node_type_id": "i3.xlarge",
-                        "num_workers": 2
                     },
                     "timeout_seconds": 3600
                 },
@@ -77,13 +36,9 @@
                             "task_key": "bronze"
                         }
                     ],
+                    "job_cluster_key": "cluster_pipeline_partage",
                     "notebook_task": {
                         "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/02_nettoyage_silver"
-                    },
-                    "new_cluster": {
-                        "spark_version": "13.3.x-scala2.12",
-                        "node_type_id": "i3.xlarge",
-                        "num_workers": 2
                     },
                     "timeout_seconds": 3600
                 },
@@ -94,13 +49,9 @@
                             "task_key": "silver"
                         }
                     ],
+                    "job_cluster_key": "cluster_pipeline_partage",
                     "notebook_task": {
                         "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/03_analyse_gold"
-                    },
-                    "new_cluster": {
-                        "spark_version": "13.3.x-scala2.12",
-                        "node_type_id": "i3.xlarge",
-                        "num_workers": 2
                     },
                     "timeout_seconds": 3600
                 }

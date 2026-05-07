@@ -167,4 +167,4 @@ def massive_ingestion_to_delta_optimized(total_pages=20, size=5000, max_workers=
 
 
 #
-massive_ingestion_to_delta_optimized(total_pages=30, size=5000, max_workers=5)
+massive_ingestion_to_delta_optimized(total_pages=10, size=1000, max_workers=5)
