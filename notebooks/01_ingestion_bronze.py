@@ -10,6 +10,7 @@ import sys
 import requests
 import pandas as pd
 from pyspark.sql.types import *
+import concurrent.futures
 
 # Fix pour l'environnement local Windows/VS Code
 os.environ["PYSPARK_PYTHON"] = sys.executable
@@ -102,3 +103,68 @@ except NameError:
 # Lancement du processus
 donnees_brutes = fetch_hubeau_data(size=100)
 process_and_save_data(spark_session, donnees_brutes, is_local_env)
+
+
+def fetch_single_page(page, size):
+    """Fonction unitaire pour récupérer une page spécifique de l'API."""
+    API_URL = "https://hubeau.eaufrance.fr/api/v1/qualite_eau_potable/resultats_dis"
+    params = {"size": size, "page": page}
+    try:
+        response = requests.get(API_URL, params=params, timeout=30)
+        if response.status_code in [200, 206]:
+            return response.json().get("data", [])
+        else:
+            print(f"⚠️ Erreur Page {page}: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Erreur critique Page {page}: {e}")
+    return []
+
+
+def massive_ingestion_to_delta_optimized(total_pages=20, size=5000, max_workers=5):
+    bronze_path = (
+        "/tmp/data/bronze/hubeau_qualite_eau"
+        if not is_local_env
+        else "./tmp/data/bronze/hubeau_qualite_eau"
+    )
+    all_data = []
+
+    print(
+        f"📥 Démarrage de l'extraction parallèle de {total_pages} pages (Workers: {max_workers})..."
+    )
+
+    # Utilisation du multi-threading pour paralléliser les appels API
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(fetch_single_page, p, size): p
+            for p in range(1, total_pages + 1)
+        }
+
+        for future in concurrent.futures.as_completed(futures):
+            page = futures[future]
+            data = future.result()
+            if data:
+                all_data.extend(data)
+                print(f"✅ Page {page} récupérée avec succès.")
+            else:
+                print(f"⚠️ Page {page} vide.")
+
+    if all_data:
+        print(f"🚀 Transformation Spark en cours ({len(all_data)} lignes)...")
+        pdf = pd.DataFrame(all_data).astype(str)
+        df_massive = spark_session.createDataFrame(pdf)
+
+        print("💾 Sauvegarde massive dans Delta Lake...")
+        df_massive.write.format("delta").mode("append").option(
+            "mergeSchema", "true"
+        ).save(bronze_path)
+
+        # Optimisation critique pour Azure Databricks (évite la fragmentation des fichiers)
+        if not is_local_env:
+            print("🔧 Optimisation de la table Delta (Compaction)...")
+            spark_session.sql(f"OPTIMIZE delta.`{bronze_path}`")
+
+        print("🎉 Ingestion massive terminée !")
+
+
+#
+massive_ingestion_to_delta_optimized(total_pages=30, size=5000, max_workers=5)

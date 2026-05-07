@@ -6,6 +6,7 @@
 # COMMAND ----------
 
 from pyspark.sql.functions import col, to_timestamp, trim, upper
+from delta.tables import DeltaTable
 
 # 1. Définition des chemins
 path_bronze_plv = "/tmp/data/bronze/hubeau_qualite_eau"
@@ -44,11 +45,24 @@ display(df_silver.limit(10))
 # 3. Sauvegarde en Delta Lake (Silver)
 print(f"Sauvegarde dans {path_silver_plv}...")
 
-(
-    df_silver.write.format("delta")
-    .mode("overwrite")  # On écrase et remplace pour garantir l'idempotence
-    .option("overwriteSchema", "true")
-    .save(path_silver_plv)
-)
+# Optimisation : Remplacement du Overwrite (destructeur) par un MERGE (Upsert)
+if DeltaTable.isDeltaTable(spark, path_silver_plv):
+    print("Mise à jour incrémentale (MERGE) de la table Silver...")
+    delta_target = DeltaTable.forPath(spark, path_silver_plv)
+    (
+        delta_target.alias("target")
+        .merge(
+            df_silver.alias("source"),
+            "target.code_prelevement = source.code_prelevement AND target.code_parametre = source.code_parametre",
+        )
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+else:
+    print("Première création de la table Silver...")
+    df_silver.write.format("delta").mode("overwrite").option(
+        "overwriteSchema", "true"
+    ).save(path_silver_plv)
 
 print("✅ Traitement Silver terminé avec succès !")

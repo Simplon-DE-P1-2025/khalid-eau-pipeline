@@ -7,6 +7,13 @@ env/
 ENV/
 
 # =========================
+# Configuration et Secrets
+# =========================
+.env
+.env.local
+job_ids.json
+
+# =========================
 # Données et Spark (CRITIQUE)
 # =========================
 # On ignore le dossier où ton script sauvegarde les tables Delta

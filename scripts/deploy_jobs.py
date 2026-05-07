@@ -1,0 +1,118 @@
+import os
+import json
+import requests
+from pathlib import Path
+
+DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST")
+DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN")
+JOB_IDS_FILE = Path(__file__).parent.parent / "job_ids.json"
+
+if not DATABRICKS_HOST or not DATABRICKS_TOKEN:
+    print("ERROR: DATABRICKS_HOST and DATABRICKS_TOKEN environment variables required")
+    exit(1)
+
+headers = {
+    "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+    "Content-Type": "application/json",
+}
+
+
+def load_job_ids():
+    """Load existing job IDs from file."""
+    if JOB_IDS_FILE.exists():
+        with open(JOB_IDS_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_job_ids(job_ids):
+    """Save job IDs to file for future reference."""
+    JOB_IDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(JOB_IDS_FILE, "w") as f:
+        json.dump(job_ids, f, indent=2)
+    print(f"Job IDs saved to {JOB_IDS_FILE}")
+
+
+def create_or_update_job(job_name, notebook_path, timeout_seconds=3600):
+    """Create or update a Databricks job."""
+
+    job_ids = load_job_ids()
+
+    # Check if job exists in Databricks
+    response = requests.get(f"{DATABRICKS_HOST}/api/2.1/jobs/list", headers=headers)
+    if response.status_code != 200:
+        print(f"ERROR: Failed to list jobs - {response.text}")
+        return None
+
+    jobs = response.json().get("jobs", [])
+    existing_job = next((j for j in jobs if j["settings"]["name"] == job_name), None)
+
+    job_config = {
+        "name": job_name,
+        "tasks": [
+            {
+                "task_key": job_name.replace(" ", "_").replace("-", "_"),
+                "notebook_task": {"notebook_path": notebook_path},
+                "new_cluster": {
+                    "spark_version": "13.3.x-scala2.12",
+                    "node_type_id": "i3.xlarge",
+                    "num_workers": 2,
+                },
+                "timeout_seconds": timeout_seconds,
+            }
+        ],
+    }
+
+    if existing_job:
+        job_id = existing_job["job_id"]
+        print(f"Updating job '{job_name}' (ID: {job_id})")
+        response = requests.post(
+            f"{DATABRICKS_HOST}/api/2.1/jobs/reset",
+            json={"job_id": job_id, "new_settings": job_config},
+            headers=headers,
+        )
+        if response.status_code == 200:
+            print(f"  Updated successfully")
+            job_ids[job_name] = job_id
+        else:
+            print(f"  ERROR: {response.text}")
+    else:
+        print(f"Creating new job '{job_name}'")
+        response = requests.post(
+            f"{DATABRICKS_HOST}/api/2.1/jobs/create",
+            json=job_config,
+            headers=headers,
+        )
+        if response.status_code == 200:
+            job_id = response.json().get("job_id")
+            print(f"  Created with ID: {job_id}")
+            job_ids[job_name] = job_id
+        else:
+            print(f"  ERROR: {response.text}")
+            return None
+
+    save_job_ids(job_ids)
+    return job_ids.get(job_name)
+
+
+if __name__ == "__main__":
+    notebooks = [
+        (
+            "Ingestion Bronze",
+            "/Repos/khalid-eau-pipeline/notebooks/01_ingestion_bronze",
+        ),
+        (
+            "Nettoyage Silver",
+            "/Repos/khalid-eau-pipeline/notebooks/02_nettoyage_silver",
+        ),
+        (
+            "Analyse Gold",
+            "/Repos/khalid-eau-pipeline/notebooks/03_analyse_gold",
+        ),
+    ]
+
+    print("Deploying jobs to Databricks...")
+    for job_name, notebook_path in notebooks:
+        create_or_update_job(job_name, notebook_path)
+
+    print("Deployment complete!")

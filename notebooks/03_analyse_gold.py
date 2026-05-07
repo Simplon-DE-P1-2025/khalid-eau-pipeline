@@ -6,6 +6,7 @@
 # COMMAND ----------
 
 from pyspark.sql.functions import col, count, sum, when, round
+from delta.tables import DeltaTable
 
 # 1. Définition des chemins
 path_silver_plv = "/tmp/data/silver/prelevements"
@@ -66,11 +67,24 @@ display(df_gold_kpi.limit(20))
 # 4. Sauvegarde dans la couche Gold au format Delta
 print(f"Sauvegarde de la table Gold dans {path_gold_kpi}...")
 
-(
-    df_gold_kpi.write.format("delta")
-    .mode("overwrite")
-    .option("overwriteSchema", "true")
-    .save(path_gold_kpi)
-)
+# Optimisation : Remplacement du Overwrite par un MERGE (Upsert) pour la table KPI
+if DeltaTable.isDeltaTable(spark, path_gold_kpi):
+    print("Mise à jour incrémentale (MERGE) de la table Gold...")
+    delta_target = DeltaTable.forPath(spark, path_gold_kpi)
+    (
+        delta_target.alias("target")
+        .merge(
+            df_gold_kpi.alias("source"),
+            "target.code_departement = source.code_departement AND target.nom_commune = source.nom_commune",
+        )
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+else:
+    print("Première création de la table Gold...")
+    df_gold_kpi.write.format("delta").mode("overwrite").option(
+        "overwriteSchema", "true"
+    ).save(path_gold_kpi)
 
-print("✅ Couche Gold générée avec succès ! Les données sont prêtes pour l'analyse.")
+print("✅ Traitement Gold terminé avec succès !")

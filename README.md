@@ -1,33 +1,104 @@
-# Projet Data Engineering - Pipeline Qualité de l'Eau (Hub'Eau)
+# Pipeline Data Engineering - Qualité de l'Eau
 
-Ce projet implémente une pipeline de données moderne avec **Databricks**, utilisant l'**Architecture Medaillon** (Bronze, Silver, Gold) pour ingérer, transformer et exploiter les données de qualité de l'eau potable en France (via l'API Hub'Eau).
+Pipeline de données complète pour l'ingestion, transformation et analyse des données de qualité de l'eau potable en France via l'API Hub'Eau. 
 
-## 🗂️ Structure du Projet
+## Architecture
+
+Ce projet implémente l'architecture Médaillon avec trois couches de traitement :
+
+- **Bronze** : Ingestion brute des données via l'API Hub'Eau, stockage Delta sans transformation
+- **Silver** : Nettoyage, typage des données, gestion des doublons et valeurs manquantes
+- **Gold** : Tables analytiques avec KPIs de conformité par commune et indicateurs de qualité
+
+## Structure du Projet
 
 ```
-.
-├── notebooks/                  # Dossier contenant les scripts Databricks (PySpark)
-│   ├── 01_ingestion_bronze.py  # Ingestion des données API vers la couche Bronze
-│   ├── 02_nettoyage_silver.py  # Nettoyage et standardisation (Bronze -> Silver) (À venir)
-│   └── 03_analyse_gold.py      # Modélisation et agrégats métier (Silver -> Gold) (À venir)
-├── data/                       # (Optionnel) pour des données de test locales
-├── requirements.txt            # Dépendances Python si exécution locale
-└── README.md
+notebooks/
+├── 01_ingestion_bronze.py      # Extraction API Hub'Eau, parallélisation avec ThreadPool
+├── 02_nettoyage_silver.py      # Nettoyage, typage, merge incrémental
+└── 03_analyse_gold.py          # Agrégation KPIs, taux de conformité
+
+scripts/
+└── deploy_jobs.py              # Déploiement automatique des jobs Databricks
+
+.github/workflows/
+└── databricks_ci.yml           # Pipeline CI/CD avec linting et déploiement
 ```
 
-## 🚀 Comment commencer ?
+## Installation et Configuration
 
-1. **Databricks :** Liez votre Workspace Databricks à ce dépôt GitHub (via "Repos" ou "Git folders" dans Databricks).
-2. **Cluster :** Assurez-vous d'avoir un cluster avec *Databricks Runtime 13.3 LTS (ou supérieur)*.
-3. **Exécution :** Ouvrez le fichier `notebooks/01_ingestion_bronze.py` depuis Databricks (il s'ouvrira comme un Notebook) et lancez l'exécution pour importer les premières données.
+### Prérequis
 
-## 🏗️ Architecture Medallion
+- Databricks Workspace (Community Edition ou Enterprise)
+- Python 3.11+
+- GitHub avec secrets configurés
 
-* **Couche Bronze :** Données brutes issues de l'API (format JSON converti en Delta). Historisation sans modification.
-* **Couche Silver :** Données nettoyées, typées, avec gestion des valeurs manquantes, doublons et normalisation des unités.
-* **Couche Gold :** Tables prêtes pour l'analyse et la BI (indicateurs de conformité, agrégats géographiques et temporels).
+## Configuration
 
-## 📡 API Hub'Eau
+Pour déployer automatiquement sur Databricks via GitHub Actions :
 
-Nous utilisons le point d'accès pour les résultats du contrôle sanitaire de l'eau distribuée :
-`https://hubeau.eaufrance.fr/api/v1/qualite_eau_potable/resultats_dis`
+1. Créer un Personal Access Token Databricks (Settings > User Settings > Developer)
+2. Configurer les secrets GitHub (Settings > Secrets and variables > Actions) :
+   - `DATABRICKS_HOST` : URL du workspace
+   - `DATABRICKS_TOKEN` : Token d'authentification
+   - `DATABRICKS_WORKSPACE_ID` : ID du workspace
+
+3. À chaque push sur `main`, le CI/CD déploie automatiquement
+
+Voir [docs/DATABRICKS_SETUP.md](docs/DATABRICKS_SETUP.md) pour les détails complets.
+
+## Pipeline CI/CD
+
+Le workflow GitHub Actions automatise :
+
+1. Linting du code Python (flake8)
+2. Déploiement des notebooks dans le workspace Databricks
+3. Création et mise à jour des jobs orchestrés
+
+Déclenché automatiquement sur chaque push vers `main`.
+
+## Modèle de Données
+
+### Bronze (Données Brutes)
+
+Colonnes principales de l'API Hub'Eau :
+- `code_prelevement` : Identifiant unique du prélèvement
+- `code_parametre` : Type de paramètre mesuré
+- `date_prelevement` : Timestamp du prélèvement
+- `resultat_numerique` : Valeur mesurée
+- `nom_commune` : Localisation géographique
+
+### Silver (Données Nettoyées)
+
+Transformations appliquées :
+- Suppression des doublons (clé composite : code_prelevement + code_parametre)
+- Typage des colonnes dates en timestamp
+- Normalisation des codes commune et département
+- Filtrage des lignes sans identifiant de prélèvement
+
+### Gold (Données Analytiques)
+
+KPIs par commune :
+- `total_prelevements` : Nombre de prélèvements uniques
+- `conformes_bacterio` : Comptage des conformités bactériologiques
+- `conformes_chimique` : Comptage des conformités physico-chimiques
+- `taux_conformite_bacterio_pct` : Taux de conformité bactériologique
+- `taux_conformite_chimique_pct` : Taux de conformité chimique
+
+## Optimisations
+
+- Parallélisation des appels API (ThreadPoolExecutor, 5 workers par défaut)
+- Pagination des requêtes pour gérer de gros volumes
+- Merge incrémental (UPSERT) pour les mises à jour sans suppression
+- Compaction Delta sur Azure Databricks (OPTIMIZE)
+
+## Ressources API
+
+API Hub'Eau (Portail d'information sur l'eau) :
+- Endpoint : `https://hubeau.eaufrance.fr/api/v1/qualite_eau_potable/resultats_dis`
+- Format : JSON avec pagination et filtrage géographique
+- Gestion des erreurs : codes 200, 206 acceptés
+
+## Exécution
+
+Les trois notebooks peuvent être exécutés indépendamment ou orchestrés via un Databricks Job qui appelle les trois séquentiellement. Le CI/CD les déploie automatiquement.
