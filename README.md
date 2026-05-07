@@ -47,6 +47,7 @@ Pour déployer automatiquement sur Databricks via GitHub Actions :
 
 Voir [docs/DATABRICKS_SETUP.md](docs/DATABRICKS_SETUP.md) pour les détails complets.
 
+
 ## Pipeline CI/CD
 
 Le workflow GitHub Actions automatise :
