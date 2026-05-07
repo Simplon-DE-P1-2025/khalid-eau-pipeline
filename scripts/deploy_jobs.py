@@ -161,24 +161,83 @@ if __name__ == "__main__":
         print("Failed to upload notebooks. Aborting.")
         exit(1)
 
-    # Step 2: Create/update jobs
-    notebooks = [
-        (
-            "Ingestion Bronze",
-            "/Repos/khalid-eau-pipeline/notebooks/01_ingestion_bronze",
-        ),
-        (
-            "Nettoyage Silver",
-            "/Repos/khalid-eau-pipeline/notebooks/02_nettoyage_silver",
-        ),
-        (
-            "Analyse Gold",
-            "/Repos/khalid-eau-pipeline/notebooks/03_analyse_gold",
-        ),
-    ]
+    print("\nDeploying orchestrated job to Databricks...")
 
-    print("\nDeploying jobs to Databricks...")
-    for job_name, notebook_path in notebooks:
-        create_or_update_job(job_name, notebook_path)
+    job_ids = load_job_ids()
 
+    # Create orchestrated job with dependencies: Bronze -> Silver -> Gold
+    orchestrated_job_name = "Pipeline Complete - Bronze to Gold"
+    orchestrated_job_config = {
+        "name": orchestrated_job_name,
+        "tasks": [
+            {
+                "task_key": "bronze",
+                "notebook_task": {
+                    "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/01_ingestion_bronze"
+                },
+                "existing_cluster_id": DATABRICKS_CLUSTER_ID,
+                "timeout_seconds": 3600,
+            },
+            {
+                "task_key": "silver",
+                "depends_on": [{"task_key": "bronze"}],
+                "notebook_task": {
+                    "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/02_nettoyage_silver"
+                },
+                "existing_cluster_id": DATABRICKS_CLUSTER_ID,
+                "timeout_seconds": 3600,
+            },
+            {
+                "task_key": "gold",
+                "depends_on": [{"task_key": "silver"}],
+                "notebook_task": {
+                    "notebook_path": "/Repos/khalid-eau-pipeline/notebooks/03_analyse_gold"
+                },
+                "existing_cluster_id": DATABRICKS_CLUSTER_ID,
+                "timeout_seconds": 3600,
+            },
+        ],
+        "schedule": {
+            "quartz_cron_expression": "0 0 * * *",
+            "timezone_id": "Europe/Paris",
+            "pause_status": "UNPAUSED",
+        },
+    }
+
+    # Check if job exists
+    response = requests.get(f"{DATABRICKS_HOST}/api/2.1/jobs/list", headers=headers)
+    jobs = response.json().get("jobs", [])
+    existing_job = next(
+        (j for j in jobs if j["settings"]["name"] == orchestrated_job_name), None
+    )
+
+    if existing_job:
+        job_id = existing_job["job_id"]
+        print(f"Updating orchestrated job '{orchestrated_job_name}' (ID: {job_id})")
+        response = requests.post(
+            f"{DATABRICKS_HOST}/api/2.1/jobs/reset",
+            json={"job_id": job_id, "new_settings": orchestrated_job_config},
+            headers=headers,
+        )
+        if response.status_code == 200:
+            print(f"  Updated successfully")
+            job_ids[orchestrated_job_name] = job_id
+        else:
+            print(f"  ERROR: {response.text}")
+    else:
+        print(f"Creating orchestrated job '{orchestrated_job_name}'")
+        response = requests.post(
+            f"{DATABRICKS_HOST}/api/2.1/jobs/create",
+            json=orchestrated_job_config,
+            headers=headers,
+        )
+        if response.status_code == 200:
+            job_id = response.json().get("job_id")
+            print(f"  Created with ID: {job_id}")
+            job_ids[orchestrated_job_name] = job_id
+        else:
+            print(f"  ERROR: {response.text}")
+
+    save_job_ids(job_ids)
     print("\nDeployment complete!")
+    print(f"Pipeline scheduled to run daily at 00:00 (Europe/Paris)")
