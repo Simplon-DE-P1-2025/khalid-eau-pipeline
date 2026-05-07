@@ -15,11 +15,8 @@ jobs:
         with:
           python-version: '3.13'
       
-      - name: Install uv
-        run: pip install uv
-      
-      - name: Install dependencies with uv
-        run: uv pip install -r requirements.txt flake8 pytest
+      - name: Install dependencies
+        run: pip install -r requirements.txt flake8 pytest
       
       - name: Lint with flake8
         run: flake8 notebooks/ --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -36,11 +33,8 @@ jobs:
         with:
           python-version: '3.13'
       
-      - name: Install uv
-        run: pip install uv
-      
-      - name: Install dependencies with uv
-        run: uv pip install requests
+      - name: Install dependencies
+        run: pip install requests
       
       - name: Deploy to Databricks
         env:
