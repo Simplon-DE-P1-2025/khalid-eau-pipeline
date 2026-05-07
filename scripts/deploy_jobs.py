@@ -34,10 +34,35 @@ def save_job_ids(job_ids):
     print(f"Job IDs saved to {JOB_IDS_FILE}")
 
 
+def create_folder(folder_path):
+    """Create a folder in Databricks workspace."""
+    url = f"{DATABRICKS_HOST}/api/2.0/workspace/mkdirs"
+    payload = {"path": folder_path}
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code == 200:
+        print(f"  Created folder {folder_path}")
+        return True
+    elif "already exists" in response.text:
+        print(f"  Folder {folder_path} already exists")
+        return True
+    else:
+        print(f"  ERROR creating folder {folder_path}: {response.text}")
+        return False
+
+
 def upload_notebooks():
     """Upload notebooks to Databricks workspace via REST API."""
     notebooks_dir = Path(__file__).parent.parent / "notebooks"
     target_path = "/Repos/khalid-eau-pipeline/notebooks"
+
+    print(f"\nCreating folders in Databricks...")
+    if not create_folder("/Repos"):
+        return False
+    if not create_folder("/Repos/khalid-eau-pipeline"):
+        return False
+    if not create_folder(target_path):
+        return False
 
     print(f"\nUploading notebooks from {notebooks_dir} to {target_path}...")
 
