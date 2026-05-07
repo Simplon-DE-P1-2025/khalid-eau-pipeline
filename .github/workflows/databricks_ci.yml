@@ -15,10 +15,11 @@ jobs:
         with:
           python-version: '3.13'
       
-      - name: Install dependencies
-        run: |
-          pip install flake8 pytest requests databricks-cli
-          pip install -r requirements.txt
+      - name: Install uv
+        run: pip install uv
+      
+      - name: Install dependencies with uv
+        run: uv pip install -r requirements.txt flake8 pytest
       
       - name: Lint with flake8
         run: flake8 notebooks/ --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -35,20 +36,15 @@ jobs:
         with:
           python-version: '3.13'
       
-      - name: Install Databricks CLI
-        run: |
-          pip install databricks-cli requests
+      - name: Install uv
+        run: pip install uv
+      
+      - name: Install dependencies with uv
+        run: uv pip install requests
       
       - name: Deploy to Databricks
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_WORKSPACE_ID: ${{ secrets.DATABRICKS_WORKSPACE_ID }}
-        run: |
-          echo "Deploying notebooks to Databricks workspace..."
-          
-          # Copier les notebooks dans le workspace Databricks
-          databricks workspace import-dir ./notebooks /Repos/khalid-eau-pipeline/notebooks --overwrite
-          
-          # Créer ou mettre à jour le job orchestré
-          python scripts/deploy_jobs.py
+        run: python scripts/deploy_jobs.py

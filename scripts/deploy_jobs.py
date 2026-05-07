@@ -33,6 +33,40 @@ def save_job_ids(job_ids):
     print(f"Job IDs saved to {JOB_IDS_FILE}")
 
 
+def upload_notebooks():
+    """Upload notebooks to Databricks workspace via REST API."""
+    notebooks_dir = Path(__file__).parent.parent / "notebooks"
+    target_path = "/Repos/khalid-eau-pipeline/notebooks"
+
+    print(f"\nUploading notebooks from {notebooks_dir} to {target_path}...")
+
+    for notebook_file in notebooks_dir.glob("*.py"):
+        notebook_name = notebook_file.stem
+        notebook_content = notebook_file.read_text()
+
+        # Databricks API pour importer un notebook
+        url = f"{DATABRICKS_HOST}/api/2.0/workspace/import"
+
+        payload = {
+            "path": f"{target_path}/{notebook_name}",
+            "format": "SOURCE",
+            "language": "PYTHON",
+            "overwrite": True,
+            "content": notebook_content,
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+
+        if response.status_code == 200:
+            print(f"  Uploaded {notebook_name}")
+        else:
+            print(f"  ERROR uploading {notebook_name}: {response.text}")
+            return False
+
+    print("All notebooks uploaded successfully")
+    return True
+
+
 def create_or_update_job(job_name, notebook_path, timeout_seconds=3600):
     """Create or update a Databricks job."""
 
@@ -96,6 +130,14 @@ def create_or_update_job(job_name, notebook_path, timeout_seconds=3600):
 
 
 if __name__ == "__main__":
+    print("Starting Databricks deployment...\n")
+
+    # Step 1: Upload notebooks
+    if not upload_notebooks():
+        print("Failed to upload notebooks. Aborting.")
+        exit(1)
+
+    # Step 2: Create/update jobs
     notebooks = [
         (
             "Ingestion Bronze",
@@ -111,8 +153,8 @@ if __name__ == "__main__":
         ),
     ]
 
-    print("Deploying jobs to Databricks...")
+    print("\nDeploying jobs to Databricks...")
     for job_name, notebook_path in notebooks:
         create_or_update_job(job_name, notebook_path)
 
-    print("Deployment complete!")
+    print("\nDeployment complete!")
